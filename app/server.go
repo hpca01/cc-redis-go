@@ -10,6 +10,13 @@ import (
 var _ = net.Listen
 var _ = os.Exit
 
+func staticResponse() []byte {
+	bytes := []byte{}
+	msg := "+PONG\r\n"
+	bytes = append(bytes, msg...)
+	return bytes
+}
+
 func main() {
 	// You can use print statements as follows for debugging, they'll be visible when running tests.
 	fmt.Println("Logs from your program will appear here!")
@@ -21,9 +28,33 @@ func main() {
 		fmt.Println("Failed to bind to port 6379")
 		os.Exit(1)
 	}
-	_, err = l.Accept()
-	if err != nil {
-		fmt.Println("Error accepting connection: ", err.Error())
-		os.Exit(1)
+	buf := make([]byte, 512)
+	for {
+		socket, err := l.Accept()
+		if err != nil {
+			fmt.Println("Error trying to accept tcp conn", err)
+			os.Exit(1)
+		}
+		size, err := socket.Read(buf)
+		if err != nil {
+			fmt.Println("Error reading from active connection ", err)
+			fmt.Printf("Closing accepted connection to %+v due to error\n", socket.RemoteAddr())
+		}
+		fmt.Println("Received ", (buf[:size]))
+		if err != nil {
+			fmt.Println("Error reading from active connection ", err)
+			fmt.Printf("Closing accepted connection to %+v due to error\n", socket.RemoteAddr())
+			socket.Close()
+		}
+		response := staticResponse()
+		fmt.Println("static response ", string(response))
+		size, err = socket.Write(response)
+		if err != nil {
+			fmt.Println("Error reading from active connection ", err)
+			fmt.Printf("Closing accepted connection to %+v due to error\n", socket.RemoteAddr())
+			socket.Close()
+		}
+		fmt.Println("Wrote to socket N bytes ", size)
+		socket.Close()
 	}
 }
