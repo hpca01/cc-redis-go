@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 )
 
 // Ensures gofmt doesn't remove the "net" and "os" imports in stage 1 (feel free to remove this!)
@@ -15,6 +16,17 @@ func staticResponse() []byte {
 	msg := "+PONG\r\n"
 	bytes = append(bytes, msg...)
 	return bytes
+}
+
+func numPings(buf []byte, size int) int {
+	splitStrings := strings.Split(string(buf[:size]), `\r\n`)
+	count := 0
+	for _, v := range splitStrings {
+		if v == "PING" {
+			count++
+		}
+	}
+	return count
 }
 
 func main() {
@@ -41,6 +53,7 @@ func main() {
 			fmt.Printf("Closing accepted connection to %+v due to error\n", socket.RemoteAddr())
 		}
 		fmt.Println("Received ", (buf[:size]))
+		numberOfPings := numPings(buf, size)
 		if err != nil {
 			fmt.Println("Error reading from active connection ", err)
 			fmt.Printf("Closing accepted connection to %+v due to error\n", socket.RemoteAddr())
@@ -48,11 +61,14 @@ func main() {
 		}
 		response := staticResponse()
 		fmt.Println("static response ", string(response))
-		size, err = socket.Write(response)
-		if err != nil {
-			fmt.Println("Error reading from active connection ", err)
-			fmt.Printf("Closing accepted connection to %+v due to error\n", socket.RemoteAddr())
-			socket.Close()
+		for i := 0; i < numberOfPings; i++ {
+			size, err = socket.Write(response)
+			if err != nil {
+				fmt.Println("Error reading from active connection ", err)
+				fmt.Printf("Closing accepted connection to %+v due to error\n", socket.RemoteAddr())
+				socket.Close()
+			}
+			fmt.Println("Wrote to socket N bytes ", size)
 		}
 		fmt.Println("Wrote to socket N bytes ", size)
 		socket.Close()
