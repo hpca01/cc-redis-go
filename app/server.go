@@ -4,12 +4,26 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 )
 
 // Ensures gofmt doesn't remove the "net" and "os" imports in stage 1 (feel free to remove this!)
 var _ = net.Listen
 var _ = os.Exit
+
+type CommandType int32
+
+const (
+	PING CommandType = iota
+	ECHO
+)
+
+type Command struct {
+	command  CommandType
+	args     int
+	argBytes []string
+}
 
 func staticResponse() []byte {
 	bytes := []byte{}
@@ -29,6 +43,26 @@ func numPings(buf []byte, size int) int {
 	return count
 }
 
+func parseCommand(buf []byte, size int) Command {
+	asStr := string(buf[:size])
+	splitStrings := strings.Split(asStr, "\r\n")
+	// first part is always the num of args
+	numArgs, err := strconv.Atoi(splitStrings[0][1:])
+	if err != nil {
+		fmt.Println("Error convering num args")
+		panic(err)
+	}
+	var command Command
+	switch strings.ToUpper(splitStrings[2]) {
+	case "PING":
+		command = Command{PING, numArgs, []string{}}
+	case "ECHO":
+		// ECHO always has something in args
+		command = Command{ECHO, numArgs, splitStrings[3:]}
+	}
+	return command
+}
+
 func handleResponse(socket net.Conn) {
 	buf := make([]byte, 512)
 	for {
@@ -39,18 +73,22 @@ func handleResponse(socket net.Conn) {
 			break
 		}
 		fmt.Printf("Received %d bytes %+v\n", size, (buf[:size]))
-		// _ := numPings(buf, size)
-		if err != nil {
-			fmt.Println("Error reading from active connection ", err)
-			fmt.Printf("Closing accepted connection to %+v due to error\n", socket.RemoteAddr())
-			break
-		}
-		response := staticResponse()
-		fmt.Println("static response ", string(response))
-		size, err = socket.Write(response)
-		if err != nil {
-			fmt.Println("Encountered error writing to socket ", err)
-			break
+		command := parseCommand(buf, size)
+		switch command.command {
+		case PING:
+			response := staticResponse()
+			fmt.Println("static response ", string(response))
+			size, err = socket.Write(response)
+			if err != nil {
+				fmt.Println("Encountered error writing to socket ", err)
+			}
+		case ECHO:
+			response := strings.Join(command.argBytes, "\r\n")
+			fmt.Println("Echo response ", response)
+			size, err = socket.Write([]byte(response))
+			if err != nil {
+				fmt.Println("Encountered error writing ECHO response to socket ", err)
+			}
 		}
 		fmt.Println("Wrote to socket N bytes ", size)
 	}
