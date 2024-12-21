@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Ensures gofmt doesn't remove the "net" and "os" imports in stage 1 (feel free to remove this!)
@@ -115,6 +116,7 @@ func handleGet(socket net.Conn, command Command) {
 		if err != nil {
 			fmt.Println("Encountered error writing GET response to socket ", err)
 		}
+		return
 	}
 	output := serializeString(value)
 	_, err = socket.Write([]byte(output))
@@ -124,10 +126,19 @@ func handleGet(socket net.Conn, command Command) {
 }
 
 func handleSet(socket net.Conn, command Command) {
-	// this assumes that format is *2\r\n$4\r\SET\r\n$3\r\nKEY\r\n$3\r\nVAL\r\n
+	// this assumes that format is *3\r\n$4\r\nSET\r\n$3\r\nKEY\r\n$3\r\nVAL\r\n
 	key := command.argBytes[1]
 	value := command.argBytes[3]
-	KvStore.SET(key, NewValue(value, nil))
+	if command.args < 5 {
+		KvStore.SET(key, NewValue(value, nil))
+	} else {
+		amtTime, err := strconv.Atoi(command.argBytes[len(command.argBytes)-2])
+		if err != nil {
+			panic("Error converting px value to time in handle set")
+		}
+		futureTime := time.Now().Add(time.Millisecond * time.Duration(amtTime))
+		KvStore.SET(key, NewValue(value, &futureTime))
+	}
 	_, err := socket.Write([]byte(ok))
 	if err != nil {
 		fmt.Println("Encountered error writing SET response to socket ", err)

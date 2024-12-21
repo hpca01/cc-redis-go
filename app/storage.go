@@ -13,7 +13,7 @@ type Value struct {
 }
 
 func (v *Value) isExpired() bool {
-	return v.timer.After(time.Now())
+	return v.timer.Before(time.Now())
 }
 
 func NewValue(v string, time *time.Time) Value {

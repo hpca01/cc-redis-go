@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 // * 1 CR LF $ 4 CR LF P I N G
@@ -14,6 +15,10 @@ var singlePing = []byte{42, 49, 13, 10, 36, 52, 13, 10, 80, 73, 78, 71, 13, 10}
 var doublePing = []byte{42, 49, 13, 10, 36, 52, 13, 10, 80, 73, 78, 71, 13, 10, 80, 73, 78, 71, 13, 10}
 
 var echoCommand = []byte("*2\r\n$4\r\nECHO\r\n$3\r\nhey\r\n")
+
+var setCmd = []byte("*3\r\n$4\r\nSET\r\n$3\r\nKEY\r\n$3\r\nVAL\r\n")
+
+var setWithExpCmd = []byte("*5\r\n$3\r\nSET\r\n$4\r\npear\r\n$5\r\ngrape\r\n$2\r\npx\r\n$3\r\n100\r\n")
 
 func TestSinglePing(t *testing.T) {
 	count := numPings(singlePing, len(singlePing))
@@ -64,10 +69,78 @@ func TestValidateCommandTypeECHO(t *testing.T) {
 	}
 }
 
+func TestValidateCommandTypeSet(t *testing.T) {
+	output := parseCommand(setCmd, len(setCmd))
+	expected := Command{
+		SET,
+		3,
+		[]string{"$3", "KEY", "$3", "VAL", ""},
+	}
+	if output.command != expected.command {
+		log.Fatalf("Expected type of command %+v vs %+v\n", expected.command, output.command)
+	}
+	if output.args != expected.args {
+		log.Fatalf("Expected count of args %+v vs %+v\n", expected.args, output.args)
+	}
+	if reflect.DeepEqual(output.argBytes, expected.argBytes) != true {
+		log.Fatalf("Expected remaining strings %+v vs %+v\n", expected.argBytes, output.argBytes)
+	}
+}
+
+func TestValidateCommandTypeSetWithExp(t *testing.T) {
+	output := parseCommand(setWithExpCmd, len(setWithExpCmd))
+	expected := Command{
+		SET,
+		5,
+		[]string{"$4", "pear", "$5", "grape", "$2", "px", "$3", "100", ""},
+	}
+	if output.command != expected.command {
+		log.Fatalf("Expected type of command %+v vs %+v\n", expected.command, output.command)
+	}
+	if output.args != expected.args {
+		log.Fatalf("Expected count of args %+v vs %+v\n", expected.args, output.args)
+	}
+	if reflect.DeepEqual(output.argBytes, expected.argBytes) != true {
+		log.Fatalf("Expected remaining strings %+v vs %+v\n", expected.argBytes, output.argBytes)
+	}
+}
+
 func TestSerializeString(t *testing.T) {
 	output := serializeString("bar")
 	expected := "$3\r\nbar\r\n"
 	if strings.Compare(output, expected) != 0 {
 		log.Fatalf("Serialize string expected [%s] got [%s]", expected, output)
+	}
+}
+
+func TestKeyExpirationNotExpired(t *testing.T) {
+	kv := NewKvStore()
+	amount := 100
+	currTime := time.Now()
+	futureTime := currTime.Add(time.Millisecond * time.Duration(amount))
+	value := NewValue("bar", &futureTime)
+	kv.SET("foo", value)
+	if value.timer != futureTime {
+		log.Fatal("Time is different from the value desired")
+	}
+	output, _ := kv.GET("foo")
+	if output != "bar" {
+		log.Fatalf("Expecting %s got %s", "bar", output)
+	}
+}
+func TestKeyExpirationExpired(t *testing.T) {
+	kv := NewKvStore()
+	amount := 100
+	currTime := time.Now()
+	futureTime := currTime.Add(time.Millisecond * time.Duration(amount))
+	value := NewValue("bar", &futureTime)
+	kv.SET("foo", value)
+	if value.timer != futureTime {
+		log.Fatal("Time is different from the value desired")
+	}
+	time.Sleep(time.Millisecond * 101)
+	output, _ := kv.GET("foo")
+	if output != "" {
+		log.Fatalf("Expecting %s got %s", "", output)
 	}
 }
