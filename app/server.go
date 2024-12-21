@@ -110,7 +110,7 @@ func handleGet(socket net.Conn, command Command) {
 	// this assumes that format is *2\r\n$4\r\GET\r\n$3\r\nKEY\r\n
 	key := command.argBytes[1]
 	value, err := KvStore.GET(key)
-	if errors.Is(err, ErrKeyNotFound) {
+	if errors.Is(err, ErrKeyNotFound) || errors.Is(err, ErrKeyExpired) {
 		_, err := socket.Write([]byte(notExist))
 		if err != nil {
 			fmt.Println("Encountered error writing GET response to socket ", err)
@@ -127,7 +127,7 @@ func handleSet(socket net.Conn, command Command) {
 	// this assumes that format is *2\r\n$4\r\SET\r\n$3\r\nKEY\r\n$3\r\nVAL\r\n
 	key := command.argBytes[1]
 	value := command.argBytes[3]
-	KvStore.SET(key, value)
+	KvStore.SET(key, NewValue(value, nil))
 	_, err := socket.Write([]byte(ok))
 	if err != nil {
 		fmt.Println("Encountered error writing SET response to socket ", err)
