@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -17,12 +18,23 @@ type CommandType int32
 const (
 	PING CommandType = iota
 	ECHO
+	SET
+	GET
 )
 
 type Command struct {
 	command  CommandType
 	args     int
 	argBytes []string
+}
+
+const ok = "+OK\r\n"
+const notExist = "$-1\r\n"
+
+var KvStore KeyValueStore
+
+func init() {
+	KvStore = *NewKvStore()
 }
 
 func staticResponse() []byte {
@@ -59,8 +71,67 @@ func parseCommand(buf []byte, size int) Command {
 	case "ECHO":
 		// ECHO always has something in args
 		command = Command{ECHO, numArgs, splitStrings[3:]}
+	case "SET":
+		command = Command{SET, numArgs, splitStrings[3:]}
+	case "GET":
+		command = Command{GET, numArgs, splitStrings[3:]}
 	}
 	return command
+}
+
+func handlePing(socket net.Conn, command Command) {
+	_ = command // for future
+	response := staticResponse()
+	fmt.Println("static response ", string(response))
+	_, err := socket.Write(response)
+	if err != nil {
+		fmt.Println("Encountered error writing to socket ", err)
+	}
+}
+
+func handleEcho(socket net.Conn, command Command) {
+	response := strings.Join(command.argBytes, "\r\n")
+	fmt.Println("Echo response ", response)
+	_, err := socket.Write([]byte(response))
+	if err != nil {
+		fmt.Println("Encountered error writing ECHO response to socket ", err)
+	}
+}
+
+func serializeString(str string) string {
+	len := len(str)
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("$%d", len))
+	sb.WriteString(fmt.Sprintf("\r\n%s\r\n", str))
+	return sb.String()
+}
+
+func handleGet(socket net.Conn, command Command) {
+	// this assumes that format is *2\r\n$4\r\GET\r\n$3\r\nKEY\r\n
+	key := command.argBytes[1]
+	value, err := KvStore.GET(key)
+	if errors.Is(err, ErrKeyNotFound) {
+		_, err := socket.Write([]byte(notExist))
+		if err != nil {
+			fmt.Println("Encountered error writing GET response to socket ", err)
+		}
+	}
+	output := serializeString(value)
+	_, err = socket.Write([]byte(output))
+	if err != nil {
+		fmt.Println("Encountered error writing GET response to socket ", err)
+	}
+}
+
+func handleSet(socket net.Conn, command Command) {
+	// this assumes that format is *2\r\n$4\r\SET\r\n$3\r\nKEY\r\n$3\r\nVAL\r\n
+	key := command.argBytes[1]
+	value := command.argBytes[3]
+	KvStore.SET(key, value)
+	_, err := socket.Write([]byte(ok))
+	if err != nil {
+		fmt.Println("Encountered error writing SET response to socket ", err)
+	}
 }
 
 func handleResponse(socket net.Conn) {
@@ -76,22 +147,16 @@ func handleResponse(socket net.Conn) {
 		command := parseCommand(buf, size)
 		switch command.command {
 		case PING:
-			response := staticResponse()
-			fmt.Println("static response ", string(response))
-			size, err = socket.Write(response)
-			if err != nil {
-				fmt.Println("Encountered error writing to socket ", err)
-			}
+			handlePing(socket, command)
 		case ECHO:
-			response := strings.Join(command.argBytes, "\r\n")
-			fmt.Println("Echo response ", response)
-			size, err = socket.Write([]byte(response))
-			if err != nil {
-				fmt.Println("Encountered error writing ECHO response to socket ", err)
-			}
+			handleEcho(socket, command)
+		case GET:
+			handleGet(socket, command)
+		case SET:
+			handleSet(socket, command)
 		}
-		fmt.Println("Wrote to socket N bytes ", size)
 	}
+	socket.Close()
 }
 
 func main() {

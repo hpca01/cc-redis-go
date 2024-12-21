@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -60,5 +61,13 @@ func TestValidateCommandTypeECHO(t *testing.T) {
 	}
 	if reflect.DeepEqual(output.argBytes, expected.argBytes) != true {
 		log.Fatalf("Expected remaining strings %+v vs %+v\n", expected.argBytes, output.argBytes)
+	}
+}
+
+func TestSerializeString(t *testing.T) {
+	output := serializeString("bar")
+	expected := "$3\r\nbar\r\n"
+	if strings.Compare(output, expected) != 0 {
+		log.Fatalf("Serialize string expected [%s] got [%s]", expected, output)
 	}
 }
