@@ -29,8 +29,48 @@ type Command struct {
 	argBytes []string
 }
 
+type RdbArgs struct {
+	dir        string
+	dbfilename string
+}
+
+type ListStr []string
+
+func (s *ListStr) has(search string) bool {
+	size := len(*s)
+	for i := 0; i < size; i++ {
+		if (*s)[i] == search {
+			return true
+		}
+	}
+	return false
+}
+func (s *ListStr) idxOf(search string) int {
+	size := len(*s)
+	for i := 0; i < size; i++ {
+		if (*s)[i] == search {
+			return i
+		}
+	}
+	return -1
+}
+
+func NewRdbArgsFromCmdArgs(args []string) *RdbArgs {
+	var argsList ListStr = args
+	var dirName string
+	var dbFileName string
+	if argsList.has("--dir") && argsList.has("--dbfilename") {
+		dir := argsList.idxOf("--dir")
+		dirName = args[dir+1]
+		dbfile := argsList.idxOf("--dbfilename")
+		dbFileName = args[dbfile+1]
+	}
+	return &RdbArgs{dirName, dbFileName}
+}
+
 const ok = "+OK\r\n"
 const notExist = "$-1\r\n"
+const emptyResponse = "*0\r\n"
 
 var KvStore KeyValueStore
 
@@ -107,6 +147,19 @@ func serializeString(str string) string {
 	return sb.String()
 }
 
+func serializeResponse(arr []string) string {
+	size := len(arr)
+	if size == 0 {
+		return emptyResponse
+	}
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("*%d\r\n", size))
+	for i := 0; i < size; i++ {
+		sb.WriteString(serializeString(arr[i]))
+	}
+	return sb.String()
+}
+
 func handleGet(socket net.Conn, command Command) {
 	// this assumes that format is *2\r\n$4\r\GET\r\n$3\r\nKEY\r\n
 	key := command.argBytes[1]
@@ -172,6 +225,9 @@ func handleResponse(socket net.Conn) {
 
 func main() {
 	fmt.Println("Logs from your program will appear here!")
+	args := os.Args[1:]
+	rdb := NewRdbArgsFromCmdArgs(args)
+	fmt.Printf("Got the following command line args %+v\n", rdb)
 
 	l, err := net.Listen("tcp", "0.0.0.0:6379")
 	if err != nil {

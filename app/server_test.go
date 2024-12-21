@@ -144,3 +144,12 @@ func TestKeyExpirationExpired(t *testing.T) {
 		log.Fatalf("Expecting %s got %s", "", output)
 	}
 }
+
+func TestSerializeArrayResponse(t *testing.T) {
+	respArr := []string{"dir", "/tmp/redis-files"}
+	output := serializeResponse(respArr)
+	expected := "*2\r\n$3\r\ndir\r\n$16\r\n/tmp/redis-files\r\n"
+	if output != expected {
+		log.Fatalf("Serialize Array Response expected [%s] got [%s]", expected, output)
+	}
+}
