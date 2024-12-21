@@ -21,6 +21,7 @@ const (
 	ECHO
 	SET
 	GET
+	CONFIG
 )
 
 type Command struct {
@@ -68,6 +69,11 @@ func NewRdbArgsFromCmdArgs(args []string) *RdbArgs {
 	return &RdbArgs{dirName, dbFileName}
 }
 
+func (r *RdbArgs) persistIntoKV(k *KeyValueStore) {
+	k.SET("dir", NewValue(r.dir, nil))
+	k.SET("dbfilename", NewValue(r.dbfilename, nil))
+}
+
 const ok = "+OK\r\n"
 const notExist = "$-1\r\n"
 const emptyResponse = "*0\r\n"
@@ -82,6 +88,7 @@ func staticResponse() []byte {
 	bytes := []byte{}
 	msg := "+PONG\r\n"
 	bytes = append(bytes, msg...)
+	// bytes := serializeResponse([]string{"PONG"})
 	return bytes
 }
 
@@ -116,6 +123,8 @@ func parseCommand(buf []byte, size int) Command {
 		command = Command{SET, numArgs, splitStrings[3:]}
 	case "GET":
 		command = Command{GET, numArgs, splitStrings[3:]}
+	case "CONFIG":
+		command = Command{CONFIG, numArgs, splitStrings[3:]}
 	}
 	return command
 }
@@ -149,7 +158,7 @@ func serializeString(str string) string {
 
 func serializeResponse(arr []string) string {
 	size := len(arr)
-	if size == 0 {
+	if size == 0 || arr[0] == "" {
 		return emptyResponse
 	}
 	var sb strings.Builder
@@ -198,6 +207,28 @@ func handleSet(socket net.Conn, command Command) {
 	}
 }
 
+func handleConfig(socket net.Conn, command Command) {
+	switch command.argBytes[1] {
+	case "GET":
+		key := command.argBytes[3]
+		value, err := KvStore.GET(key)
+		if errors.Is(err, ErrKeyNotFound) || errors.Is(err, ErrKeyExpired) {
+			_, err := socket.Write([]byte(notExist))
+			if err != nil {
+				fmt.Println("Encountered error writing GET response to socket ", err)
+			}
+			return
+		}
+		response := serializeResponse([]string{key, value})
+		_, err = socket.Write([]byte(response))
+		if err != nil {
+			fmt.Println("Encountered error writing GET response to socket ", err)
+		}
+	case "SET":
+		break
+	}
+}
+
 func handleResponse(socket net.Conn) {
 	buf := make([]byte, 512)
 	for {
@@ -218,6 +249,9 @@ func handleResponse(socket net.Conn) {
 			handleGet(socket, command)
 		case SET:
 			handleSet(socket, command)
+		//TODO: Fix this , handleConfig method needs to be set
+		case CONFIG:
+			handleConfig(socket, command)
 		}
 	}
 	socket.Close()
@@ -227,6 +261,7 @@ func main() {
 	fmt.Println("Logs from your program will appear here!")
 	args := os.Args[1:]
 	rdb := NewRdbArgsFromCmdArgs(args)
+	rdb.persistIntoKV(&KvStore)
 	fmt.Printf("Got the following command line args %+v\n", rdb)
 
 	l, err := net.Listen("tcp", "0.0.0.0:6379")

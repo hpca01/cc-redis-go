@@ -20,6 +20,8 @@ var setCmd = []byte("*3\r\n$4\r\nSET\r\n$3\r\nKEY\r\n$3\r\nVAL\r\n")
 
 var setWithExpCmd = []byte("*5\r\n$3\r\nSET\r\n$4\r\npear\r\n$5\r\ngrape\r\n$2\r\npx\r\n$3\r\n100\r\n")
 
+var cmdConfigGet = []byte("*3\r\n$6\r\nCONFIG\r\n$3\r\nGET\r\n$3\r\ndir\r\n")
+
 func TestSinglePing(t *testing.T) {
 	count := numPings(singlePing, len(singlePing))
 	if count != 1 {
@@ -87,6 +89,23 @@ func TestValidateCommandTypeSet(t *testing.T) {
 	}
 }
 
+func TestValidateCommandTypeConfigGet(t *testing.T) {
+	output := parseCommand(cmdConfigGet, len(cmdConfigGet))
+	expected := Command{
+		CONFIG,
+		3,
+		[]string{"$3", "GET", "$3", "dir", ""},
+	}
+	if output.command != expected.command {
+		log.Fatalf("Expected type of command %+v vs %+v\n", expected.command, output.command)
+	}
+	if output.args != expected.args {
+		log.Fatalf("Expected count of args %+v vs %+v\n", expected.args, output.args)
+	}
+	if reflect.DeepEqual(output.argBytes, expected.argBytes) != true {
+		log.Fatalf("Expected remaining strings %+v vs %+v\n", expected.argBytes, output.argBytes)
+	}
+}
 func TestValidateCommandTypeSetWithExp(t *testing.T) {
 	output := parseCommand(setWithExpCmd, len(setWithExpCmd))
 	expected := Command{
@@ -149,6 +168,14 @@ func TestSerializeArrayResponse(t *testing.T) {
 	respArr := []string{"dir", "/tmp/redis-files"}
 	output := serializeResponse(respArr)
 	expected := "*2\r\n$3\r\ndir\r\n$16\r\n/tmp/redis-files\r\n"
+	if output != expected {
+		log.Fatalf("Serialize Array Response expected [%s] got [%s]", expected, output)
+	}
+}
+func TestSerializeEmptyResponse(t *testing.T) {
+	respArr := []string{""}
+	output := serializeResponse(respArr)
+	expected := "*0\r\n"
 	if output != expected {
 		log.Fatalf("Serialize Array Response expected [%s] got [%s]", expected, output)
 	}
