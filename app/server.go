@@ -29,21 +29,9 @@ func numPings(buf []byte, size int) int {
 	return count
 }
 
-func main() {
-	fmt.Println("Logs from your program will appear here!")
-
-	l, err := net.Listen("tcp", "0.0.0.0:6379")
-	if err != nil {
-		fmt.Println("Failed to bind to port 6379")
-		os.Exit(1)
-	}
-	socket, err := l.Accept()
+func handleResponse(socket net.Conn) {
 	buf := make([]byte, 512)
 	for {
-		if err != nil {
-			fmt.Println("Error trying to accept tcp conn", err)
-			os.Exit(1)
-		}
 		size, err := socket.Read(buf)
 		if err != nil {
 			fmt.Println("Error reading from active connection ", err)
@@ -62,8 +50,26 @@ func main() {
 		size, err = socket.Write(response)
 		if err != nil {
 			fmt.Println("Encountered error writing to socket ", err)
+			break
 		}
 		fmt.Println("Wrote to socket N bytes ", size)
 	}
-	socket.Close()
+}
+
+func main() {
+	fmt.Println("Logs from your program will appear here!")
+
+	l, err := net.Listen("tcp", "0.0.0.0:6379")
+	if err != nil {
+		fmt.Println("Failed to bind to port 6379")
+		os.Exit(1)
+	}
+	for {
+		socket, err := l.Accept()
+		if err != nil {
+			fmt.Println("Error trying to accept tcp conn", err)
+			os.Exit(1)
+		}
+		go handleResponse(socket)
+	}
 }
