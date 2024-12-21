@@ -19,7 +19,7 @@ func staticResponse() []byte {
 }
 
 func numPings(buf []byte, size int) int {
-	splitStrings := strings.Split(string(buf[:size]), `\r\n`)
+	splitStrings := strings.Split(string(buf[:size]), "\r\n")
 	count := 0
 	for _, v := range splitStrings {
 		if v == "PING" {
@@ -30,19 +30,16 @@ func numPings(buf []byte, size int) int {
 }
 
 func main() {
-	// You can use print statements as follows for debugging, they'll be visible when running tests.
 	fmt.Println("Logs from your program will appear here!")
 
-	// Uncomment this block to pass the first stage
-	//
 	l, err := net.Listen("tcp", "0.0.0.0:6379")
 	if err != nil {
 		fmt.Println("Failed to bind to port 6379")
 		os.Exit(1)
 	}
+	socket, err := l.Accept()
 	buf := make([]byte, 512)
 	for {
-		socket, err := l.Accept()
 		if err != nil {
 			fmt.Println("Error trying to accept tcp conn", err)
 			os.Exit(1)
@@ -51,26 +48,22 @@ func main() {
 		if err != nil {
 			fmt.Println("Error reading from active connection ", err)
 			fmt.Printf("Closing accepted connection to %+v due to error\n", socket.RemoteAddr())
+			break
 		}
-		fmt.Println("Received ", (buf[:size]))
-		numberOfPings := numPings(buf, size)
+		fmt.Printf("Received %d bytes %+v\n", size, (buf[:size]))
+		// _ := numPings(buf, size)
 		if err != nil {
 			fmt.Println("Error reading from active connection ", err)
 			fmt.Printf("Closing accepted connection to %+v due to error\n", socket.RemoteAddr())
-			socket.Close()
+			break
 		}
 		response := staticResponse()
 		fmt.Println("static response ", string(response))
-		for i := 0; i < numberOfPings; i++ {
-			size, err = socket.Write(response)
-			if err != nil {
-				fmt.Println("Error reading from active connection ", err)
-				fmt.Printf("Closing accepted connection to %+v due to error\n", socket.RemoteAddr())
-				socket.Close()
-			}
-			fmt.Println("Wrote to socket N bytes ", size)
+		size, err = socket.Write(response)
+		if err != nil {
+			fmt.Println("Encountered error writing to socket ", err)
 		}
 		fmt.Println("Wrote to socket N bytes ", size)
-		socket.Close()
 	}
+	socket.Close()
 }
